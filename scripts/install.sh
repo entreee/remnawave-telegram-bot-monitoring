@@ -2,134 +2,175 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/bash_loading_animations.sh"
 
-trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
+# Colors and styles via tput
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+BLUE=$(tput setaf 4)
+BOLD=$(tput bold)
+RESET=$(tput sgr0)
 
-handle_error() {
-  local line=$1
-  local cmd=$2
-  BLA::print_error "Ошибка на строке $line: $cmd"
-  exit 1
+# Spinner
+SPINNER_PID=0
+spin() {
+  local marks=('/' '-' '\\' '|')
+  local i=0
+  tput civis 2>/dev/null || true
+  while :; do
+    printf "\r%s" "${marks[$i]}"
+    i=$(( (i + 1) % 4 ))
+    sleep 0.1
+  done &
+  SPINNER_PID=$!
+}
+stop_spin() {
+  if [[ "${SPINNER_PID}" -ne 0 ]]; then
+    kill "${SPINNER_PID}" >/dev/null 2>&1 || true
+    wait "${SPINNER_PID}" 2>/dev/null || true
+    SPINNER_PID=0
+    printf "\r "
+  fi
+  tput cnorm 2>/dev/null || true
 }
 
-ask_non_empty() {
-  local prompt=$1
-  local value
-  while true; do
-    read -rp "$(BLA::yellow "$prompt: ")" value
-    if [[ -n $value ]]; then
-      echo "$value"
-      return
+# Error handling
+trap 'echo "${RED}❌ Ошибка на строке $LINENO${RESET}"' ERR
+
+# Helpers for styled prints
+title() { echo "${BLUE}${BOLD}$*${RESET}"; }
+ask() { echo -n "${YELLOW}$*${RESET}"; }
+info() { echo "${BLUE}$*${RESET}"; }
+ok() { echo "${GREEN}$*${RESET}"; }
+err() { echo "${RED}$*${RESET}"; }
+
+# Input validators
+prompt_non_empty() {
+  local label="$1" value
+  while :; do
+    ask "$label: "
+    IFS= read -r value || true
+    if [[ -n ${value:-} ]]; then
+      printf "%s\n" "$value"
+      return 0
     fi
-    BLA::print_error "Значение не может быть пустым"
+    err "❌ Ошибка:${RESET} некорректный ввод, попробуйте снова."
   done
 }
 
-ask_number() {
-  local prompt=$1
-  local default=$2
-  local value
-  while true; do
-    read -rp "$(BLA::yellow "$prompt [$default]: ")" value
+prompt_number() {
+  local label="$1" default="$2" value
+  while :; do
+    ask "$label [$default]: "
+    IFS= read -r value || true
     value=${value:-$default}
-    if [[ $value =~ ^[0-9]+$ ]]; then
-      echo "$value"
-      return
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+      printf "%s\n" "$value"
+      return 0
     fi
-    BLA::print_error "Введите целое число"
+    err "❌ Ошибка:${RESET} некорректный ввод, попробуйте снова."
   done
 }
 
-ask_menu() {
-  local prompt=$1
+prompt_menu() {
+  local header="$1"; shift
+  local -a options=("$@")
   local choice
-  while true; do
-    BLA::print_warning "$prompt"
-    BLA::print_warning "1) Да"
-    BLA::print_warning "2) Нет"
-    read -rp "$(BLA::yellow "> ")" choice
-    case $choice in
-      1) return 0 ;;
-      2) return 1 ;;
-      *) BLA::print_error "Введите 1 или 2" ;;
-    esac
+  while :; do
+    echo "${YELLOW}${BOLD}$header${RESET}"
+    local i=1
+    for opt in "${options[@]}"; do
+      echo "[$i] $opt"
+      i=$((i+1))
+    done
+    ask "> "
+    IFS= read -r choice || true
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
+      printf "%s\n" "$choice"
+      return 0
+    fi
+    err "❌ Ошибка:${RESET} некорректный ввод, попробуйте снова."
   done
 }
 
-ask_auth_mode() {
-  local choice
-  while true; do
-    BLA::print_warning "Режим аутентификации Remnawave:"
-    BLA::print_warning "1) api_key"
-    BLA::print_warning "2) credentials"
-    read -rp "$(BLA::yellow "> ")" choice
-    case $choice in
-      1) REMNA_AUTH_MODE="api_key"; return ;;
-      2) REMNA_AUTH_MODE="credentials"; return ;;
-      *) BLA::print_error "Введите 1 или 2" ;;
-    esac
-  done
+must_succeed() {
+  local action_msg="$1"; shift
+  title "$action_msg"
+  spin
+  if "$@" >/dev/null 2>&1; then
+    stop_spin
+    ok "✅ Готово"
+  else
+    stop_spin
+    err "❌ Ошибка: не удалось выполнить: $*"
+    return 1
+  fi
 }
 
+# Header
+title "Установка Remnawave Telegram Bot Monitoring"
+
+# Root check
 if [[ $(id -u) -ne 0 ]]; then
-  BLA::print_error "Запустите скрипт от root (sudo)"
+  err "❌ Ошибка:${RESET} требуется запуск от root (sudo)."
   exit 1
 fi
 
+# Dependencies
 if ! command -v curl >/dev/null 2>&1; then
-  BLA::start_loading_animation "Установка curl"
-  apt-get update >/dev/null && apt-get install -y curl >/dev/null
-  BLA::stop_loading_animation
-  BLA::print_success "curl установлена"
+  must_succeed "Устанавливаю curl" bash -lc 'apt-get update && apt-get install -y curl'
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-  BLA::start_loading_animation "Установка Docker"
-  curl -fsSL https://get.docker.com | sh >/dev/null
-  BLA::stop_loading_animation
-  BLA::print_success "Docker установлен"
+  must_succeed "Устанавливаю Docker" bash -lc 'curl -fsSL https://get.docker.com | sh'
 fi
 
 if ! docker compose version >/dev/null 2>&1; then
-  BLA::start_loading_animation "Установка docker compose"
-  apt-get update >/dev/null && apt-get install -y docker-compose-plugin >/dev/null
-  BLA::stop_loading_animation
-  BLA::print_success "docker compose установлен"
+  must_succeed "Устанавливаю docker compose plugin" bash -lc 'apt-get update && apt-get install -y docker-compose-plugin'
 fi
 
-BOT_TOKEN=$(ask_non_empty "Bot token")
-BOT_USERNAME=$(ask_non_empty "Bot username (without @)")
-TELEGRAM_ID=$(ask_non_empty "Your Telegram ID")
-ACCESS_PASSWORD=$(ask_non_empty "Access password")
-REMNA_BASE_URLS=$(ask_non_empty "Remnawave panel URLs (comma separated)")
-ask_auth_mode
+# Collect configuration
+title "Параметры бота"
+BOT_TOKEN=$(prompt_non_empty "Bot token")
+BOT_USERNAME=$(prompt_non_empty "Bot username (без @)")
+TELEGRAM_ID=$(prompt_non_empty "Ваш Telegram ID")
+ACCESS_PASSWORD=$(prompt_non_empty "Пароль доступа к панели")
+REMNA_BASE_URLS=$(prompt_non_empty "URL панели Remnawave (через запятую)")
 
-if [[ $REMNA_AUTH_MODE == "api_key" ]]; then
-  REMNA_API_KEY=$(ask_non_empty "API key or mappings")
+# Auth mode
+choice=$(prompt_menu "Выберите режим аутентификации:" "API-ключ" "Логин/Пароль")
+if [[ "$choice" == "1" ]]; then
+  REMNA_AUTH_MODE="api_key"
+  REMNA_API_KEY=$(prompt_non_empty "API-ключ или маппинг (domain=key,...)" )
   AUTH_BLOCK="REMNA_API_KEY=$REMNA_API_KEY"
 else
-  REMNA_USERNAME=$(ask_non_empty "Username or mappings")
-  read -rp "$(BLA::yellow "Password (if common): ")" REMNA_PASSWORD
-  AUTH_BLOCK="REMNA_USERNAME=$REMNA_USERNAME\nREMNA_PASSWORD=$REMNA_PASSWORD"
+  REMNA_AUTH_MODE="credentials"
+  REMNA_USERNAME=$(prompt_non_empty "Логин или маппинг (domain=user,...)" )
+  ask "Пароль (если общий, можно пусто): "
+  IFS= read -r REMNA_PASSWORD || true
+  AUTH_BLOCK="REMNA_USERNAME=$REMNA_USERNAME\nREMNA_PASSWORD=${REMNA_PASSWORD:-}"
 fi
 
-if ask_menu "Хотите включить Uptime Kuma?"; then
+# Optional services
+choice=$(prompt_menu "Включить Uptime Kuma?" "Да" "Нет")
+if [[ "$choice" == "1" ]]; then
   ENABLE_KUMA=true
-  KUMA_URL=$(ask_non_empty "Kuma public URL")
+  KUMA_URL=$(prompt_non_empty "Публичный URL Kuma")
   KUMA_PROFILE="--profile kuma"
 else
   ENABLE_KUMA=false
-  KUMA_URL=https://status.example.com/uptime
+  KUMA_URL="https://status.example.com/uptime"
   KUMA_PROFILE=""
 fi
 
-if ask_menu "Хотите включить Prometheus/Alertmanager?"; then
+choice=$(prompt_menu "Включить Prometheus/Alertmanager?" "Да" "Нет")
+if [[ "$choice" == "1" ]]; then
   ENABLE_PROMETHEUS=true
-  METRICS_PORT=$(ask_number "Metrics port" 9100)
-  ALERT_BOT_TOKEN=$(ask_non_empty "Alert bot token")
-  ALERT_SECRET=$(ask_non_empty "Alert secret")
-  read -rp "$(BLA::yellow "Alert chat IDs (comma separated) [$TELEGRAM_ID]: ")" ALERT_CHAT_IDS
+  METRICS_PORT=$(prompt_number "Порт метрик" 9100)
+  ALERT_BOT_TOKEN=$(prompt_non_empty "Токен бота для алертов")
+  ALERT_SECRET=$(prompt_non_empty "Секрет для Alertmanager вебхука")
+  ask "ID чатов для алертов (через запятую) [${TELEGRAM_ID}]: "
+  IFS= read -r ALERT_CHAT_IDS || true
   ALERT_CHAT_IDS=${ALERT_CHAT_IDS:-$TELEGRAM_ID}
   MONITOR_PROFILE="--profile monitoring"
 else
@@ -141,7 +182,9 @@ else
   MONITOR_PROFILE=""
 fi
 
-BLA::start_loading_animation "Создание .env"
+# Write .env
+title "Генерирую .env"
+spin
 cat > .env <<ENV
 BOT_TOKEN=$BOT_TOKEN
 BOT_USERNAME=$BOT_USERNAME
@@ -166,10 +209,13 @@ ALERT_BOT_TOKEN=$ALERT_BOT_TOKEN
 ALERT_SECRET=$ALERT_SECRET
 ALERT_CHAT_IDS=$ALERT_CHAT_IDS
 ENV
-BLA::stop_loading_animation
-BLA::print_success ".env создан"
+stop_spin
+ok "✅ .env создан"
 
+# Monitoring configs
 if [[ $ENABLE_PROMETHEUS == true ]]; then
+  title "Генерирую конфиги Prometheus/Alertmanager"
+  spin
   mkdir -p prometheus alertmanager
   cat > prometheus/prometheus.yml <<PROM
 global:
@@ -191,33 +237,44 @@ receivers:
             username: alert
             password: $ALERT_SECRET
 ALERT
+  stop_spin
+  ok "✅ Конфиги Prometheus/Alertmanager готовы"
 fi
 
+# Prepare dirs
 mkdir -p data backups kuma
 
-BLA::start_loading_animation "Запуск контейнеров"
-docker compose $KUMA_PROFILE $MONITOR_PROFILE up -d >/dev/null
-BLA::stop_loading_animation
-BLA::print_success "Контейнеры запущены"
+# Start stack
+title "Запускаю контейнеры Docker"
+spin
+if docker compose $KUMA_PROFILE $MONITOR_PROFILE up -d >/dev/null 2>&1; then
+  stop_spin
+  ok "✅ Контейнеры запущены"
+else
+  stop_spin
+  err "❌ Ошибка: не удалось запустить docker compose"
+  exit 1
+fi
 
-ln -sf "$SCRIPT_DIR/remna-tg-monitoring" /usr/local/bin/remna-tg-monitoring
-BLA::print_success "Утилита remna-tg-monitoring установлена"
+# Symlink helper
+ln -sf "$SCRIPT_DIR/remna-tg-monitoring" /usr/local/bin/remna-tg-monitoring || true
+ok "Ссылка /usr/local/bin/remna-tg-monitoring создана"
 
+# Final output
 BOT_LINK="https://t.me/$BOT_USERNAME"
 
-printf '\n'
-printf '+---------------+--------------------------------------+'\n
-printf '| %-13s | %-36s |\n' "Service" "URL"
-printf '+---------------+--------------------------------------+'\n
-printf '| %-13s | %-36s |\n' "Bot" "$BOT_LINK"
-printf '| %-13s | %-36s |\n' "Metrics" "http://localhost:$METRICS_PORT/metrics"
+echo
+title "Полезные ссылки"
+printf '%s\n' "Bot:        $BOT_LINK"
+printf '%s\n' "Metrics:    http://localhost:$METRICS_PORT/metrics"
 if [[ $ENABLE_KUMA == true ]]; then
-  printf '| %-13s | %-36s |\n' "Kuma" "$KUMA_URL"
+  printf '%s\n' "Kuma:       $KUMA_URL"
 fi
 if [[ $ENABLE_PROMETHEUS == true ]]; then
-  printf '| %-13s | %-36s |\n' "Prometheus" "http://localhost:9090"
-  printf '| %-13s | %-36s |\n' "Alertmanager" "http://localhost:9093"
+  printf '%s\n' "Prometheus: http://localhost:9090"
+  printf '%s\n' "Alertmgr:   http://localhost:9093"
 fi
-printf '+---------------+--------------------------------------+'\n
 
-BLA::print_success "$(BLA::bold 'Установка завершена успешно!')"
+echo
+echo "${GREEN}${BOLD}✅ Установка завершена успешно!${RESET}"
+

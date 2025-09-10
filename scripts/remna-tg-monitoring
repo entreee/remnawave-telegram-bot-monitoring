@@ -1,29 +1,83 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Resolve directories
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-source "$SCRIPT_DIR/bash_loading_animations.sh"
 
-trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
+# Colors and styles
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+BLUE=$(tput setaf 4)
+BOLD=$(tput bold)
+RESET=$(tput sgr0)
 
-handle_error() {
-  local line=$1
-  local cmd=$2
-  BLA::print_error "Ошибка на строке $line: $cmd"
-  exit 1
+# Spinner
+SPINNER_PID=0
+spin() {
+  local marks=('/' '-' '\\' '|')
+  local i=0
+  tput civis 2>/dev/null || true
+  while :; do
+    printf "\r%s" "${marks[$i]}"
+    i=$(( (i + 1) % 4 ))
+    sleep 0.1
+  done &
+  SPINNER_PID=$!
+}
+stop_spin() {
+  if [[ "${SPINNER_PID}" -ne 0 ]]; then
+    kill "${SPINNER_PID}" >/dev/null 2>&1 || true
+    wait "${SPINNER_PID}" 2>/dev/null || true
+    SPINNER_PID=0
+    printf "\r "
+  fi
+  tput cnorm 2>/dev/null || true
 }
 
+# Styled prints
+title() { echo "${BLUE}${BOLD}$*${RESET}"; }
+ok() { echo "${GREEN}$*${RESET}"; }
+err() { echo "${RED}$*${RESET}"; }
+info() { echo "${BLUE}$*${RESET}"; }
+ask() { echo -n "${YELLOW}$*${RESET}"; }
+
+trap 'echo "${RED}❌ Ошибка на строке $LINENO${RESET}"' ERR
+
 show_help() {
-  BLA::print_info "remna-tg-monitoring <command>"
+  title "remna-tg-monitoring <команда>"
   echo
-  BLA::print_info "Commands:" 
-  BLA::print_info "  start  - запускает контейнеры"
-  BLA::print_info "  stop   - останавливает контейнеры"
-  BLA::print_info "  status - показывает статус"
-  BLA::print_info "  links  - выводит доступные URL"
-  BLA::print_info "  help   - эта справка"
+  info "Доступные команды:"
+  echo "  install  - интерактивная установка (.env, сервисы)"
+  echo "  start    - запустить контейнеры"
+  echo "  stop     - остановить контейнеры"
+  echo "  restart  - перезапустить контейнеры"
+  echo "  status   - показать состояние контейнеров"
+  echo "  logs     - показать логи (последние 100 строк)"
+  echo "  links    - показать полезные ссылки"
+  echo "  help     - помощь"
+}
+
+ensure_env_or_install() {
+  if [[ ! -f .env ]]; then
+    err "Файл .env не найден."
+    echo "${YELLOW}${BOLD}Выполнить установку сейчас?${RESET}"
+    echo "[1] Да"
+    echo "[2] Нет"
+    ask "> "
+    IFS= read -r choice || true
+    if [[ "$choice" == "1" ]]; then
+      "$SCRIPT_DIR/install.sh"
+    else
+      exit 1
+    fi
+  fi
+}
+
+run_compose() {
+  docker compose "$@"
 }
 
 subcommand="${1:-help}"
@@ -32,31 +86,61 @@ shift || true
 cd "$PROJECT_DIR"
 
 case "$subcommand" in
+  install)
+    "$SCRIPT_DIR/install.sh"
+    ;;
   start)
-    BLA::start_loading_animation "Запуск контейнеров"
-    docker compose up -d >/dev/null
-    BLA::stop_loading_animation
-    BLA::print_success "Контейнеры запущены"
-    ;;
-  stop)
-    BLA::start_loading_animation "Остановка контейнеров"
-    docker compose down >/dev/null
-    BLA::stop_loading_animation
-    BLA::print_success "Контейнеры остановлены"
-    ;;
-  status)
-    BLA::print_info "Статус контейнеров"
-    docker compose ps
-    ;;
-  links)
-    if [[ ! -f .env ]]; then
-      BLA::print_error ".env не найден"
+    ensure_env_or_install
+    title "Запускаю контейнеры Docker"
+    spin
+    if run_compose up -d >/dev/null 2>&1; then
+      stop_spin
+      ok "✅ Контейнеры запущены"
+    else
+      stop_spin
+      err "❌ Не удалось запустить контейнеры"
       exit 1
     fi
+    ;;
+  stop)
+    title "Останавливаю контейнеры Docker"
+    spin
+    if run_compose down >/dev/null 2>&1; then
+      stop_spin
+      ok "✅ Контейнеры остановлены"
+    else
+      stop_spin
+      err "❌ Не удалось остановить контейнеры"
+      exit 1
+    fi
+    ;;
+  restart)
+    title "Перезапускаю контейнеры Docker"
+    spin
+    if run_compose down >/dev/null 2>&1 && run_compose up -d >/dev/null 2>&1; then
+      stop_spin
+      ok "✅ Контейнеры перезапущены"
+    else
+      stop_spin
+      err "❌ Не удалось перезапустить контейнеры"
+      exit 1
+    fi
+    ;;
+  status)
+    title "Состояние контейнеров"
+    run_compose ps
+    ;;
+  logs)
+    title "Логи docker compose (последние 100 строк)"
+    run_compose logs --tail=100
+    ;;
+  links)
+    ensure_env_or_install
     set -a
+    # shellcheck disable=SC1091
     source .env
     set +a
-    BLA::print_info "Доступные ссылки:"
+    title "Полезные ссылки"
     printf '+---------------+--------------------------------------+'"\n"
     printf '| %-13s | %-36s |\n' "Service" "URL"
     printf '+---------------+--------------------------------------+'"\n"
@@ -76,4 +160,5 @@ case "$subcommand" in
   help|*)
     show_help
     ;;
- esac
+esac
+
