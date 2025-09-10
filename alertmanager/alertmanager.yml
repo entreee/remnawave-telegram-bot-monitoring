@@ -1,0 +1,11 @@
+route:
+  receiver: 'telegram'
+
+receivers:
+  - name: 'telegram'
+    webhook_configs:
+      - url: http://alert-bot:8080/alerts
+        http_config:
+          basic_auth:
+            username: alert
+            password: ALERT_SECRET
