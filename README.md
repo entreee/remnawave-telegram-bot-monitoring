@@ -24,10 +24,13 @@ curl -sL https://raw.githubusercontent.com/remnawave/remnawave-telegram-bot-moni
 ```
 The script installs Docker if needed, generates `.env`, asks about Uptime Kuma or Prometheus and starts the stack.
 
+Manage the stack later with `remna-tg-monitoring start|stop|status|links|help`.
+
 ### Environment Variables
 | Variable | Description |
 | --- | --- |
 | `BOT_TOKEN` | Telegram bot token |
+| `BOT_USERNAME` | Bot username used for links |
 | `ACCESS_PASSWORD` | Password used by `/login` |
 | `REMNA_BASE_URLS` | Comma‑separated list of panel URLs |
 | `REMNA_AUTH_MODE` | `api_key` or `credentials` |
@@ -89,10 +92,13 @@ curl -sL https://raw.githubusercontent.com/remnawave/remnawave-telegram-bot-moni
 ```
 Скрипт установит Docker при необходимости, создаст `.env`, предложит включить Uptime Kuma или Prometheus и запустит весь стек.
 
+Управлять стеком позже можно через `remna-tg-monitoring start|stop|status|links|help`.
+
 ### Переменные окружения
 | Переменная | Описание |
 | --- | --- |
 | `BOT_TOKEN` | Токен телеграм‑бота |
+| `BOT_USERNAME` | Имя бота для ссылок |
 | `ACCESS_PASSWORD` | Пароль для `/login` |
 | `REMNA_BASE_URLS` | Список URL панелей через запятую |
 | `REMNA_AUTH_MODE` | `api_key` или `credentials` |

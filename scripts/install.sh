@@ -144,6 +144,7 @@ fi
 BLA::start_loading_animation "Создание .env"
 cat > .env <<ENV
 BOT_TOKEN=$BOT_TOKEN
+BOT_USERNAME=$BOT_USERNAME
 ACCESS_PASSWORD=$ACCESS_PASSWORD
 
 REMNA_BASE_URLS=$REMNA_BASE_URLS
@@ -198,6 +199,9 @@ BLA::start_loading_animation "Запуск контейнеров"
 docker compose $KUMA_PROFILE $MONITOR_PROFILE up -d >/dev/null
 BLA::stop_loading_animation
 BLA::print_success "Контейнеры запущены"
+
+ln -sf "$SCRIPT_DIR/remna-tg-monitoring" /usr/local/bin/remna-tg-monitoring
+BLA::print_success "Утилита remna-tg-monitoring установлена"
 
 BOT_LINK="https://t.me/$BOT_USERNAME"
 

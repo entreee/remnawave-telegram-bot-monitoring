@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/bash_loading_animations.sh"
+
+trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
+
+handle_error() {
+  local line=$1
+  local cmd=$2
+  BLA::print_error "Ошибка на строке $line: $cmd"
+  exit 1
+}
+
+show_help() {
+  BLA::print_info "remna-tg-monitoring <command>"
+  echo
+  BLA::print_info "Commands:" 
+  BLA::print_info "  start  - запускает контейнеры"
+  BLA::print_info "  stop   - останавливает контейнеры"
+  BLA::print_info "  status - показывает статус"
+  BLA::print_info "  links  - выводит доступные URL"
+  BLA::print_info "  help   - эта справка"
+}
+
+subcommand="${1:-help}"
+shift || true
+
+cd "$PROJECT_DIR"
+
+case "$subcommand" in
+  start)
+    BLA::start_loading_animation "Запуск контейнеров"
+    docker compose up -d >/dev/null
+    BLA::stop_loading_animation
+    BLA::print_success "Контейнеры запущены"
+    ;;
+  stop)
+    BLA::start_loading_animation "Остановка контейнеров"
+    docker compose down >/dev/null
+    BLA::stop_loading_animation
+    BLA::print_success "Контейнеры остановлены"
+    ;;
+  status)
+    BLA::print_info "Статус контейнеров"
+    docker compose ps
+    ;;
+  links)
+    if [[ ! -f .env ]]; then
+      BLA::print_error ".env не найден"
+      exit 1
+    fi
+    set -a
+    source .env
+    set +a
+    BLA::print_info "Доступные ссылки:"
+    printf '+---------------+--------------------------------------+'"\n"
+    printf '| %-13s | %-36s |\n' "Service" "URL"
+    printf '+---------------+--------------------------------------+'"\n"
+    if [[ -n "${BOT_USERNAME:-}" ]]; then
+      printf '| %-13s | %-36s |\n' "Bot" "https://t.me/$BOT_USERNAME"
+    fi
+    printf '| %-13s | %-36s |\n' "Metrics" "http://localhost:${METRICS_PORT:-9100}/metrics"
+    if [[ ${ENABLE_KUMA:-false} == true ]]; then
+      printf '| %-13s | %-36s |\n' "Kuma" "${KUMA_URL:-}"
+    fi
+    if [[ ${ENABLE_PROMETHEUS:-false} == true ]]; then
+      printf '| %-13s | %-36s |\n' "Prometheus" "http://localhost:9090"
+      printf '| %-13s | %-36s |\n' "Alertmanager" "http://localhost:9093"
+    fi
+    printf '+---------------+--------------------------------------+'\n
+    ;;
+  help|*)
+    show_help
+    ;;
+ esac

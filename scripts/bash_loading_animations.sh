@@ -4,6 +4,7 @@
 BLA_GREEN=$(tput setaf 2)
 BLA_RED=$(tput setaf 1)
 BLA_YELLOW=$(tput setaf 3)
+BLA_BLUE=$(tput setaf 4)
 BLA_BOLD=$(tput bold)
 BLA_RESET=$(tput sgr0)
 
@@ -21,6 +22,10 @@ BLA::yellow() {
   printf "%s%s%s" "$BLA_YELLOW" "$1" "$BLA_RESET"
 }
 
+BLA::blue() {
+  printf "%s%s%s" "$BLA_BLUE" "$1" "$BLA_RESET"
+}
+
 BLA::bold() {
   printf "%s%s%s" "$BLA_BOLD" "$1" "$BLA_RESET"
 }
@@ -35,6 +40,10 @@ BLA::print_error() {
 
 BLA::print_warning() {
   BLA::yellow "$1\n"
+}
+
+BLA::print_info() {
+  BLA::blue "$1\n"
 }
 
 BLA::start_loading_animation() {
