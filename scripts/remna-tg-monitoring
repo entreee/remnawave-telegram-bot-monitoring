@@ -7,12 +7,12 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Colors and styles
-RED=$(tput setaf 1)
-GREEN=$(tput setaf 2)
-YELLOW=$(tput setaf 3)
-BLUE=$(tput setaf 4)
-BOLD=$(tput bold)
-RESET=$(tput sgr0)
+RED=$(tput setaf 1 2>/dev/null || true)
+GREEN=$(tput setaf 2 2>/dev/null || true)
+YELLOW=$(tput setaf 3 2>/dev/null || true)
+BLUE=$(tput setaf 4 2>/dev/null || true)
+BOLD=$(tput bold 2>/dev/null || true)
+RESET=$(tput sgr0 2>/dev/null || true)
 
 # Spinner
 SPINNER_PID=0
@@ -46,6 +46,16 @@ ask() { echo -n "${YELLOW}$*${RESET}"; }
 
 trap 'echo "${RED}❌ Ошибка на строке $LINENO${RESET}"' ERR
 
+compose_cmd() {
+  if docker compose version >/dev/null 2>&1; then
+    echo "docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    echo "docker-compose"
+  else
+    return 1
+  fi
+}
+
 show_help() {
   title "remna-tg-monitoring <команда>"
   echo
@@ -76,8 +86,18 @@ ensure_env_or_install() {
   fi
 }
 
-run_compose() {
-  docker compose "$@"
+compose_run() {
+  local bin
+  bin=$(compose_cmd) || { err "docker compose не найден"; exit 1; }
+  "$bin" "$@"
+}
+
+profile_args_from_env() {
+  local args=()
+  set -a; source .env; set +a
+  [[ ${ENABLE_KUMA:-false} == true ]] && args+=(--profile kuma)
+  [[ ${ENABLE_PROMETHEUS:-false} == true ]] && args+=(--profile monitoring)
+  printf '%s\n' "${args[*]}"
 }
 
 subcommand="${1:-help}"
@@ -93,7 +113,8 @@ case "$subcommand" in
     ensure_env_or_install
     title "Запускаю контейнеры Docker"
     spin
-    if run_compose up -d >/dev/null 2>&1; then
+    PROFILES=( $(profile_args_from_env) )
+    if compose_run ${PROFILES[@]} up -d >/dev/null 2>&1; then
       stop_spin
       ok "✅ Контейнеры запущены"
     else
@@ -105,7 +126,7 @@ case "$subcommand" in
   stop)
     title "Останавливаю контейнеры Docker"
     spin
-    if run_compose down >/dev/null 2>&1; then
+    if compose_run down >/dev/null 2>&1; then
       stop_spin
       ok "✅ Контейнеры остановлены"
     else
@@ -115,9 +136,11 @@ case "$subcommand" in
     fi
     ;;
   restart)
+    ensure_env_or_install
     title "Перезапускаю контейнеры Docker"
     spin
-    if run_compose down >/dev/null 2>&1 && run_compose up -d >/dev/null 2>&1; then
+    PROFILES=( $(profile_args_from_env) )
+    if compose_run down >/dev/null 2>&1 && compose_run ${PROFILES[@]} up -d >/dev/null 2>&1; then
       stop_spin
       ok "✅ Контейнеры перезапущены"
     else
@@ -128,11 +151,11 @@ case "$subcommand" in
     ;;
   status)
     title "Состояние контейнеров"
-    run_compose ps
+    compose_run ps
     ;;
   logs)
     title "Логи docker compose (последние 100 строк)"
-    run_compose logs --tail=100
+    compose_run logs --tail=100
     ;;
   links)
     ensure_env_or_install
