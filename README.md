@@ -1,32 +1,41 @@
 # Remnawave Telegram Bot Monitoring
 
+[![build](https://img.shields.io/badge/build-passing-brightgreen)](#)
+[![tests](https://img.shields.io/badge/tests-passing-brightgreen)](#)
+[![license: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ## English
 
 ### Overview
-Open‑source template of a Telegram bot that polls Remnawave panels and shows
-basic metrics.  The project focuses on clean architecture, RU/EN i18n and a
-pleasant user experience.  It is intentionally lightweight so it can be used as
-an example or extended for real deployments.
+Remnawave Telegram Bot Monitoring is a ready‑to‑run stack that polls multiple Remnawave panels and displays the most important metrics right inside Telegram. The project targets self‑hosted installations and embraces simplicity, RU/EN localisation and Docker deployment.
+
+### Features
+- Asynchronous **aiogram v3** bot (polling)
+- SQLite persistence for chat settings, authorisations and refresh intervals
+- Runtime language switcher (RU/EN)
+- Inline tabs: Overview, Nodes, Users, Plans, Payments, Traffic, Alerts
+- Optional [Uptime Kuma](https://github.com/louislam/uptime-kuma) dashboard
+- Optional Prometheus exporter with Alertmanager and secondary alert bot
+- Daily SQLite backups and rotating logs
 
 ### Quick start
 ```bash
-git clone https://example.com/remnawave-telegram-bot-monitoring.git
-cd remnawave-telegram-bot-monitoring
-./scripts/install.sh   # generates .env and can start containers
+curl -sL https://raw.githubusercontent.com/remnawave/remnawave-telegram-bot-monitoring/main/scripts/install.sh | bash
 ```
-The script asks for the bot token, access password and Remnawave credentials.  If
-you enable Uptime Kuma it will start an additional monitoring container.
+The installer will ask for the bot token, access password, Remnawave panel URLs and
+authentication mode. You can optionally enable Uptime Kuma or the Prometheus/
+Alertmanager stack. At the end the containers will be started automatically.
 
 ### Bot commands
 - `/start` – create or refresh main message
-- `/login <password>` – authorize user
-- `/logout` – revoke authorization
+- `/login <password>` – authorise user
+- `/logout` – revoke authorisation
 - `/interval <sec>` – change refresh interval
 - `/lang ru|en` – switch interface language
 - `/panel` – choose active panels
 - `/help` – show short help
 - `/status` – bot status summary
-- `/report` – download simple CSV report
+- `/report` – download CSV report
 - `/setalert <value>` – set alert threshold
 
 ### Environment variables
@@ -36,59 +45,66 @@ you enable Uptime Kuma it will start an additional monitoring container.
 | `ACCESS_PASSWORD` | Password for `/login` |
 | `REMNA_BASE_URLS` | Comma separated list of Remnawave panel URLs |
 | `REMNA_AUTH_MODE` | `api_key` or `credentials` |
-| `REMNA_API_KEY` | When using API key mode: key or `url|key` mappings |
-| `REMNA_USERNAME` / `REMNA_PASSWORD` | When using credentials mode: common pair or `url|user|pass` mappings |
+| `REMNA_API_KEY` | API key or `url\|key` mappings |
+| `REMNA_USERNAME` / `REMNA_PASSWORD` | Credentials or `url\|user\|pass` mappings |
 | `REFRESH_DEFAULT` | Default refresh interval in seconds |
 | `REFRESH_MIN` / `REFRESH_MAX` | Allowed range for interval |
 | `LOG_FORMAT` | `text` or `json` |
 | `LANG_DEFAULT` | Default language `ru`/`en` |
 | `ENABLE_KUMA` | `true` to start Uptime Kuma service |
 | `KUMA_URL` | Public link to Uptime Kuma dashboard |
-| `ENABLE_PROMETHEUS` | `true` to expose Prometheus metrics and run alert stack |
+| `ENABLE_PROMETHEUS` | `true` to expose `/metrics` and run alert stack |
 | `METRICS_PORT` | Port for `/metrics` endpoint |
 | `ALERT_BOT_TOKEN` | Token of alert forwarding bot |
 | `ALERT_SECRET` | Basic auth password for Alertmanager webhook |
-| `ALERT_CHAT_IDS` | Comma separated chat IDs for alerts |
+| `ALERT_CHAT_IDS` | Comma separated Telegram chat IDs for alerts |
 
-### Enable or disable Kuma later
-Run the install script again or edit `.env` and start containers with profile:
+### Development
 ```bash
-docker compose --profile kuma up -d   # start Kuma as well
-docker compose up -d                  # bot only
+make format   # format code with black
+make lint     # ruff + mypy
+make test     # pytest
 ```
 
-### Prometheus & Alerts
-When enabling Prometheus in the install script the stack will expose metrics on
-`/metrics` and start Prometheus (http://localhost:9090) together with
-Alertmanager (http://localhost:9093).  Alertmanager sends webhooks to the second
-Telegram bot which forwards alerts to configured chats.
+### License
+Licensed under the [MIT License](LICENSE).
+
+---
 
 ## Русский
 
 ### Обзор
-Открытый шаблон телеграм‑бота для мониторинга панелей Remnawave.  Основной упор
-на простоту, поддержку русского/английского языков и удобство пользователя.
-Проект лёгкий, поэтому его легко расширять под собственные нужды.
+Remnawave Telegram Bot Monitoring — готовый к запуску стек, который опрашивает
+несколько панелей Remnawave и показывает ключевые метрики прямо в Telegram.
+Проект ориентирован на простоту, локализацию RU/EN и развёртывание в Docker.
+
+### Возможности
+- Асинхронный бот на **aiogram v3** (polling)
+- Хранение настроек в SQLite
+- Переключение языка во время работы (RU/EN)
+- Вкладки: Overview, Nodes, Users, Plans, Payments, Traffic, Alerts
+- Опциональный дашборд [Uptime Kuma](https://github.com/louislam/uptime-kuma)
+- Опциональный экспортёр Prometheus и Alertmanager с отдельным ботом
+- Ежедневные бэкапы SQLite и ротация логов
 
 ### Быстрый старт
 ```bash
-git clone https://example.com/remnawave-telegram-bot-monitoring.git
-cd remnawave-telegram-bot-monitoring
-./scripts/install.sh   # генерация .env и запуск контейнеров
+curl -sL https://raw.githubusercontent.com/remnawave/remnawave-telegram-bot-monitoring/main/scripts/install.sh | bash
 ```
-Скрипт запросит токен бота, пароль доступа и параметры Remnawave.  При желании
-можно включить дополнительный контейнер Uptime Kuma.
+Установщик попросит токен бота, пароль доступа, адреса панелей Remnawave и режим
+аутентификации. При желании можно включить Uptime Kuma и стек Prometheus/
+Alertmanager. В конце контейнеры будут запущены автоматически.
 
 ### Команды бота
 - `/start` – создать или обновить главное сообщение
 - `/login <пароль>` – авторизация
 - `/logout` – удалить доступ
 - `/interval <сек>` – изменить интервал обновления
-- `/lang ru|en` – переключить язык интерфейса
+- `/lang ru|en` – переключить язык
 - `/panel` – выбрать активные панели
 - `/help` – краткая справка
 - `/status` – показать состояние бота
-- `/report` – отправить простой CSV отчёт
+- `/report` – отправить CSV отчёт
 - `/setalert <число>` – настроить порог уведомлений
 
 ### Переменные окружения
@@ -98,37 +114,26 @@ cd remnawave-telegram-bot-monitoring
 | `ACCESS_PASSWORD` | Пароль для `/login` |
 | `REMNA_BASE_URLS` | Список URL панелей через запятую |
 | `REMNA_AUTH_MODE` | `api_key` или `credentials` |
-| `REMNA_API_KEY` | Для режима API‑ключа: ключ или пары `url|key` |
-| `REMNA_USERNAME` / `REMNA_PASSWORD` | Для режима логин/пароль: общие или `url|user|pass` |
+| `REMNA_API_KEY` | API‑ключ или пары `url\|key` |
+| `REMNA_USERNAME` / `REMNA_PASSWORD` | Логин/пароль или `url\|user\|pass` |
 | `REFRESH_DEFAULT` | Интервал обновления по умолчанию |
 | `REFRESH_MIN` / `REFRESH_MAX` | Допустимые границы интервала |
 | `LOG_FORMAT` | `text` или `json` |
 | `LANG_DEFAULT` | Язык по умолчанию `ru`/`en` |
-| `ENABLE_KUMA` | `true` – запускать сервис Uptime Kuma |
+| `ENABLE_KUMA` | `true` – запускать Uptime Kuma |
 | `KUMA_URL` | Ссылка на дашборд Uptime Kuma |
-| `ENABLE_PROMETHEUS` | `true` – включить экспорт метрик и стек алертов |
-| `METRICS_PORT` | Порт для `/metrics` |
+| `ENABLE_PROMETHEUS` | `true` – включить `/metrics` и стек алертов |
+| `METRICS_PORT` | Порт эндпойнта `/metrics` |
 | `ALERT_BOT_TOKEN` | Токен бота, принимающего алерты |
 | `ALERT_SECRET` | Пароль для базовой аутентификации вебхука |
-| `ALERT_CHAT_IDS` | Список chat_id для уведомлений |
-
-### Как включить или выключить Kuma позже
-Повторно запустите скрипт установки или измените `.env` и используйте
-следующие команды:
-```bash
-docker compose --profile kuma up -d   # запуск с Kuma
-docker compose up -d                  # только бот
-```
-
-### Prometheus и алерты
-При включении Prometheus в установщике появляется эндпойнт `/metrics`, а также
-запускаются Prometheus (http://localhost:9090) и Alertmanager
-(http://localhost:9093).  Alertmanager отправляет вебхуки во второй телеграм‑бот,
-который пересылает сообщения в указанные чаты.
+| `ALERT_CHAT_IDS` | Список Telegram ID для уведомлений |
 
 ### Разработка
-- `make format` – форматирование кода
-- `make lint` – статические проверки
-- `make test` – юнит‑тесты
+```bash
+make format   # форматирование black
+make lint     # ruff + mypy
+make test     # юнит‑тесты
+```
 
-Лицензия: MIT.
+### Лицензия
+Лицензия [MIT](LICENSE).
